@@ -13,26 +13,29 @@ class Btnx:
         self.command : str = f'echo {self.password} | sudo -S btnx'
         self.process = None
         self.restart_count = 0
-
-    def run(self):
         try:
-            # The subprocess.run() is called with the check=True option which throws a subprocess.CalledProcessError.
-            # This event will be true in instances where the sudo password is wrong or when the btnx config does not detect the configured mouse.
-            # We are also at this point unable to explicitly know when the process runs successfully
-            # Except that it takes a longer time for the .run method to return CompletedProcess
-            # After which it exits with return code 0
-            while True:
-                self.process = subprocess.run(self.command, shell=True, capture_output=True, check=True)
-                if self.process.returncode == 0:
-                    print(f"Restarting, restarted : {self.restart_count}")
-                    self.restart_count += 1
-                    self.run()
-                break
+            run = self.run()
+            if run:
+                # Means that the process has terminated gracefully, perhaps due to a lack of activity from the mouse
+                self.display()
         except subprocess.CalledProcessError as e:
             self.display(e)
-            
 
-    def display(self, error):
+
+    def run(self) -> bool:
+     
+        # The subprocess.run() is called with the check=True option which throws a subprocess.CalledProcessError.
+        # This event will be true in instances where the sudo password is wrong or when the btnx config does not detect the configured mouse.
+        # We are also at this point unable to explicitly know when the process runs successfully
+        # Except that it takes a longer time for the .run method to return CompletedProcess
+        # After which it exits with return code 0
+        while True:
+            self.process = subprocess.run(self.command, shell=True, capture_output=True, check=True)
+            if self.process.returncode == 0:
+                return True
+                break
+
+    def display(self, error=None):
         # The error arg is the instance of subprocess.CalledProcessError
         print("The process could not be completed")
         print("There are usually 3 reasons for this.")
@@ -63,14 +66,21 @@ class Btnx:
             else: 
                 print("The action you chose is not valid")
                 break
-        print(f"Error-> {error.args}")
+        if error:
+            print(f"Error-> {error.args}")
+        else:
+            print("There was an error processing your action.")
         exit(1)
     
     def quit(self):
         sys.exit(0)
     
     def retry(self):
-        self.run()
+        try:
+            self.restart_count + 1
+            self.run()
+        except subprocess.CalledProcessError as e:
+            self.display(e)
     
     def btnx_config(self):
         # launch the btnx_config
@@ -87,6 +97,7 @@ class Btnx:
             if self.process.returncode == 0:
                 # This means that the user exited the btnx-config process
                 print("Attempting to start btnx")
+                self.restart_count + 1
                 self.run()
         except subprocess.CalledProcessError as e:
             # If the user hits the next block of code, then it means that the process to launch btnx-config ended in an error    
@@ -97,8 +108,10 @@ class Btnx:
     def endless(self):
         "This method runs the command without allowing an option to exit"
         try:
+            self.restart_count + 1
             self.run()
         except subprocess.CalledProcessError:
+            self.restart_count + 1
             self.run()
         except KeyboardInterrupt:
             print("Exiting")
